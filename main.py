@@ -11,20 +11,19 @@ from itertools import repeat
 from operator import add
 
 detect_language = udf(detect_language, StringType())
-text_processing = udf(lambda text, lang: stem(text, lang), StringType())
 
 sc = pyspark.SparkContext.getOrCreate()
 sqlContext = pyspark.SQLContext(sc)
 data = sqlContext.read.parquet("data")
-data = data.withColumn("lang", lit(detect_language(data["text"]))).limit(10000)
+data = data.limit(1000).withColumn("lang", lit(detect_language(data["text"])))
 
-words_count = data.rdd.flatMap(lambda row:
-                               zip(repeat(int(row["timestamp"] / 6 / 3600 / 1000)),
-                                   stem(row["text"], row["lang"]))
-                               ).map(lambda pair: (pair, 1)
-                                     ).reduceByKey(add
-                                                   ).map(lambda pair: (pair[0][0], pair[0][1], pair[1])
-                                                         ).toDF(["period", "word", "count"])
+words_count = data.rdd.filter(lambda row: row.lang == "ru"
+                              ).flatMap(lambda row:
+                                        zip(repeat(int(row["timestamp"] / 6 / 3600 / 1000)),
+                                            stem(row["text"]))
+                                        ).map(lambda pair: (pair, 1)
+                                              ).reduceByKey(add
+                                                            ).map(lambda pair: (pair[0][0], pair[0][1], pair[1])).toDF(["period", "word", "count"])
 
 words_count.show()
 
@@ -47,9 +46,8 @@ freqs = freqs.rdd.groupBy(lambda (period, word, freq): period
                                       ).map(lambda (period, word_counts):
                                             (period, sorted(word_counts, key=lambda word_count: word_count[2])))
 
-
 for item in freqs.collect():
     print ("Period %d TOP-5: " % item[0])
-    for top in item[1][:5]:
-        print("Word: %s" % (top[1]))
+    for top in item[1][-5:]:
+        print("Word: %s %s" % (top[1], top[2]))
     print("=====================")
