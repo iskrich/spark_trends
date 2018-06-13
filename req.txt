@@ -1,0 +1,5 @@
+findspark
+pyspark
+pymystem3
+nltk
+langdetect
